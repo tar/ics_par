@@ -1,6 +1,6 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include <sys/time.h>
 
 double **m1, **m2, **m3;
@@ -94,19 +94,21 @@ print_matrix(double **m, int n)
 }
 
 void
-mm(int id)
+mm(int rid, int cid)
 {
   int i, j, k;
   double sum;
 
   // compute bounds for this threads---just algebra
-  int startrow = id * N_SIZE / NUM_THREADS;
-  int endrow = (id + 1) * (N_SIZE / NUM_THREADS) - 1;
+  int startrow = rid * N_SIZE / NUM_THREADS;
+  int endrow = (rid + 1) * (N_SIZE / NUM_THREADS) - 1;
+  int startcol = cid * N_SIZE / NUM_THREADS;
+  int endcol = (cid + 1) * (N_SIZE / NUM_THREADS) - 1;
 
   // matrix mult over the strip of rows for this thread
   for (i = startrow; i <= endrow; i++)
     {
-      for (j = 0; j < N_SIZE; j++)
+      for (j = startcol; j <= endcol; j++)
         {
           sum = 0.0;
           for (k = 0; k < N_SIZE; k++)
@@ -121,8 +123,9 @@ mm(int id)
 void *
 worker(void *arg)
 {
-  int id = *((int *) arg);
-  mm(id);
+  int rid = *((int *) arg);
+  int cid = *((int *) arg + 1);
+  mm(rid, cid);
 }
 
 int
@@ -151,18 +154,21 @@ main(int argc, char **argv)
   m3 = alloc_matrix(n);
 
   // Allocate thread handles
-  threads = (pthread_t *) malloc(NUM_THREADS * sizeof(pthread_t));
+  threads = (pthread_t *) malloc(NUM_THREADS * NUM_THREADS * sizeof(pthread_t));
   struct timeval tv;
   gettimeofday(&tv, NULL);
   long long start = tv.tv_usec;
   for (int i = 0; i < NUM_THREADS; i++)
-    {
-      p = (int *) malloc(sizeof(int));  // yes, memory leak, don't worry for now
-      *p = i;
-      pthread_create(&threads[i], NULL, worker, (void *) (p));
-    }
+    for (int j = 0; j < NUM_THREADS; j++)
+      {
+        p = (int *) malloc(sizeof(int) * 2); // yes, memory leak, don't worry for now
+        *p = i;
+        *(p + 1) = j;
+        pthread_create(&threads[i * NUM_THREADS + j], NULL, worker,
+            (void *) (p));
+      }
 
-  for (int i = 0; i < NUM_THREADS; i++)
+  for (int i = 0; i < NUM_THREADS * NUM_THREADS; i++)
     {
       pthread_join(threads[i], NULL);
     }
