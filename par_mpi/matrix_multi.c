@@ -1,13 +1,10 @@
-// m3Sc 522
-// MPI matrix multiplication example
-
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
-#define Tm1G 13
 
-double **m1, **m2, **m3;
+#define TAG 13
 
 double**
 alloc_matrix(int n)
@@ -89,71 +86,73 @@ print_matrix(double **m, int n)
     {
       for (int j = 0; j < n; ++j)
         {
-          printf("%f ", m[i][j]);
+          printf("%.1f ", m[i][j]);
         }
       printf("\n");
     }
 }
 
+double **A, **B, **C;
+MPI_Status status;
+
 int
 main(int argc, char *argv[])
 {
-
-  double **m1, **m2, **m3;
-  int n = count_lines("m1.txt");
-  m1 = read_matrix("m1.txt", n, 0);
-  m2 = read_matrix("m2.txt", n, 0);
-
-  m3 = alloc_matrix(n);
-
-  double startTime, endTime;
   int numElements, offset, stripSize, myrank, numnodes, N, i, j, k;
-
+  long long start, end;
   MPI_Init(&argc, &argv);
-
   MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
   MPI_Comm_size(MPI_COMM_WORLD, &numnodes);
+  struct timeval tv;
+  if (myrank == 0)
+    {
+      N = count_lines("m1.txt");
 
-  N = n;
+      A = read_matrix("m1.txt", N, 0);
+      B = read_matrix("m2.txt", N, 0);
 
-  // allocate m1, m2, and m3 --- note that you want these to be
+      print_matrix(A, N);
+      C = alloc_matrix(N);
+    }
+
+  // allocate A, B, and C --- note that you want these to be
   // contiguously allocated.  Workers need less memory allocated.
-
 
   // start timer
   if (myrank == 0)
     {
-      startTime = MPI_Wtime();
+      gettimeofday(&tv, NULL);
+      start = tv.tv_usec;
     }
 
   stripSize = N / numnodes;
 
-  // send each node its piece of m1 -- note could be done via MPI_Scatter
+  // send each node its piece of A -- note could be done via MPI_Scatter
   if (myrank == 0)
     {
       offset = stripSize;
       numElements = stripSize * N;
       for (i = 1; i < numnodes; i++)
         {
-          MPI_Send(m1[offset], numElements, MPI_DOUBLE, i, Tm1G, MPI_COMM_WORLD);
+          MPI_Send(A[offset], numElements, MPI_DOUBLE, i, TAG, MPI_COMM_WORLD);
           offset += stripSize;
         }
     }
   else
-    {  // receive my part of m1
-      MPI_Recv(m1[0], stripSize * N, MPI_DOUBLE, 0, Tm1G, MPI_COMM_WORLD,
+    {  // receive my part of A
+      MPI_Recv(A[0], stripSize * N, MPI_DOUBLE, 0, TAG, MPI_COMM_WORLD,
           MPI_STATUS_IGNORE);
     }
 
-  // everyone gets m2
-  MPI_Bcast(m2[0], N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  // everyone gets B
+  MPI_Bcast(B[0], N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-  // Let each process initialize m3 to zero
+  // Let each process initialize C to zero
   for (i = 0; i < stripSize; i++)
     {
       for (j = 0; j < N; j++)
         {
-          m3[i][j] = 0.0;
+          C[i][j] = 0.0;
         }
     }
 
@@ -164,7 +163,7 @@ main(int argc, char *argv[])
         {
           for (k = 0; k < N; k++)
             {
-              m3[i][j] += m1[i][k] * m2[k][j];
+              C[i][j] += A[i][k] * B[k][j];
             }
         }
     }
@@ -176,21 +175,22 @@ main(int argc, char *argv[])
       numElements = stripSize * N;
       for (i = 1; i < numnodes; i++)
         {
-          MPI_Recv(m3[offset], numElements, MPI_DOUBLE, i, Tm1G, MPI_COMM_WORLD,
+          MPI_Recv(C[offset], numElements, MPI_DOUBLE, i, TAG, MPI_COMM_WORLD,
               MPI_STATUS_IGNORE);
           offset += stripSize;
         }
     }
   else
-    { // send my contribution to m3
-      MPI_Send(m3[0], stripSize * N, MPI_DOUBLE, 0, Tm1G, MPI_COMM_WORLD);
+    { // send my contribution to C
+      MPI_Send(C[0], stripSize * N, MPI_DOUBLE, 0, TAG, MPI_COMM_WORLD);
     }
 
   // stop timer
   if (myrank == 0)
     {
-      endTime = MPI_Wtime();
-      printf("Time is %f\n", endTime - startTime);
+      gettimeofday(&tv, NULL);
+      end = tv.tv_usec;
+      printf("Time is %lld\n", (end - start));
     }
 
   // print out matrix here, if I'm the master
@@ -200,7 +200,7 @@ main(int argc, char *argv[])
         {
           for (j = 0; j < N; j++)
             {
-              printf("%f ", m3[i][j]);
+              printf("%f ", C[i][j]);
             }
           printf("\n");
         }

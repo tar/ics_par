@@ -87,7 +87,7 @@ print_matrix(double **m, int n)
     {
       for (int j = 0; j < n; ++j)
         {
-          printf("%f ", m[i][j]);
+          printf("%.1f ", m[i][j]);
         }
       printf("\n");
     }
