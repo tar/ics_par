@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <sys/time.h>
 
 double **m1, **m2, **m3;
 int N_SIZE = 0;
@@ -110,7 +111,7 @@ mm(int id)
           sum = 0.0;
           for (k = 0; k < N_SIZE; k++)
             {
-              sum = sum + m1[i][k] * m2[i][k];
+              sum = sum + m1[i][k] * m2[j][k];
             }
           m3[i][j] = sum;
         }
@@ -151,6 +152,9 @@ main(int argc, char **argv)
 
   // Allocate thread handles
   threads = (pthread_t *) malloc(NUM_THREADS * sizeof(pthread_t));
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  long long start = tv.tv_usec;
   for (int i = 0; i < NUM_THREADS; i++)
     {
       p = (int *) malloc(sizeof(int));  // yes, memory leak, don't worry for now
@@ -163,6 +167,10 @@ main(int argc, char **argv)
       pthread_join(threads[i], NULL);
     }
 
+  gettimeofday(&tv, NULL);
+  long long end = tv.tv_usec;
+
+  printf("execution time = %lld us\n", (end - start));
   print_matrix(m3, n);
   return 0;
 }
